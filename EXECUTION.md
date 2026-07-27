@@ -1,11 +1,11 @@
 # AKS Ingress Comparison - Execution Guide
 
-This guide explains how to run the deployment script and validate the five-cluster AKS exposure patterns.
+This guide explains how to deploy and validate the five-cluster AKS exposure patterns using the current files in this repo.
 
 ## Files created
 
-- Script: `deploy-aks-ingress-comparison.sh`
 - Bicep (infra + workload deployment): `deploy-aks-ingress-comparison.bicep`
+- Post-deploy workloads script: `deploy-demo-workloads-all-clusters.sh`
 - VM create helper: `create-private-audit-vm.sh`
 - VM tools installer: `install-az-cli-ubuntu.sh`
 - Guide: `EXECUTION.md`
@@ -17,11 +17,11 @@ This guide explains how to run the deployment script and validate the five-clust
 - Cross-subscription audit script: `audit-managed-nginx-aks.sh`
 - Private AKS audit script: `audit-managed-nginx-private-aks.sh`
 
-Important: run the script from this same folder so it can read these source files and create Kubernetes ConfigMaps from them.
+Important: run deployment commands from this same folder so relative paths (for example `deploy-aks-ingress-comparison.bicep`) resolve correctly.
 
-## One-command Bicep deployment (recommended for repeat demos)
+## Bicep cluster deployment (recommended for repeat demos)
 
-Use this option when you want to recreate all 5 AKS demo clusters and deploy `api1`, `api2`, `api3`, managed NGINX ingress (where applicable), and router LB (for `aksnonginx`) in one deployment.
+Use this option when you want to recreate all 5 AKS demo clusters and their node pools. The Bicep file creates AKS clusters only and does not run in-cluster workload commands.
 
 Prerequisites specific to this path:
 
@@ -35,10 +35,7 @@ Run:
 az group create --name rg-aks-ingress-compare-aue --location australiaeast
 
 # 2) Deploy all clusters + workloads
-az deployment group create \
-  --resource-group rg-aks-ingress-compare-aue \
-  --template-file deploy-aks-ingress-comparison.bicep \
-  --parameters location=australiaeast nodeCount=1 nodeVmSize=Standard_B2s
+az deployment group create --resource-group rg-aks-ingress-compare-aue --template-file deploy-aks-ingress-comparison.bicep --parameters location=australiaeast nodeCount=1 nodeVmSize=Standard_B2s namePrefix=nb67hg
 ```
 
 Optional parameters:
@@ -50,10 +47,56 @@ What this Bicep deployment does:
 
 1. Creates five AKS clusters used in this comparison.
 2. Adds `userpool` node pool in each cluster.
-3. Deploys namespace `sample-api` and `api1`, `api2`, `api3` deployments/services in all clusters.
-4. Deploys managed ingress resources on managed-NGINX clusters.
-5. Applies internal managed-NGINX configuration for private ingress scenarios.
-6. Deploys `api-router` + public `LoadBalancer` service for `aksnonginx`.
+3. Creates the user-assigned identity used for automation.
+4. Outputs cluster names and identity details for follow-up workload steps.
+
+After this Bicep deployment completes, run the post-deploy script to configure workloads across all clusters.
+
+## One-command post-deploy workload rollout
+
+This script deploys `api1`, `api2`, `api3` to all 5 clusters and then applies cluster-specific ingress/router setup:
+
+1. `akspublicnginx`: managed ingress
+2. `akspvtnginx`: managed ingress + internal managed NGINX config
+3. `aksnonginx`: `api-router` + public LoadBalancer service
+4. `akspvtnginxpriv`: managed ingress + internal managed NGINX config
+5. `akspvtnon-nginx`: APIs only (no ingress by design)
+
+Run:
+
+```bash
+chmod +x deploy-demo-workloads-all-clusters.sh
+./deploy-demo-workloads-all-clusters.sh --resource-group rg-aks-ingress-compare-aue --name-prefix bc12yh
+```
+
+Azure Cloud Shell support:
+
+You can run this script from Azure Cloud Shell (Bash) as long as the required repo files are present in the same folder.
+
+Option 1 (recommended): clone the repository in Cloud Shell.
+
+```bash
+git clone https://github.com/kunalchandratre1/aks-nginx-ingress-retirement-audit.git
+cd aks-nginx-ingress-retirement-audit
+chmod +x deploy-demo-workloads-all-clusters.sh
+./deploy-demo-workloads-all-clusters.sh --resource-group rg-aks-ingress-compare-aue --name-prefix bc12yh
+```
+
+Option 2: upload only required files to Cloud Shell and run from that folder.
+
+Required files:
+
+1. `deploy-demo-workloads-all-clusters.sh`
+2. `api1.py`
+3. `api2.py`
+4. `api3.py`
+5. `api-router.py`
+
+Notes:
+
+1. Use the same `--name-prefix` value that you used in Bicep deployment.
+2. For private clusters, run this from a network path that can reach private AKS API endpoints (for example Bastion-connected VM).
+3. For private cluster API reachability, Cloud Shell may not have network path. In that case, run from a VM in the VNet.
 
 ## What this deploys
 
@@ -81,21 +124,9 @@ What this Bicep deployment does:
 - For `aksnonginx`, path routing is provided by a small public `api-router` service (LoadBalancer)
   that forwards requests to internal `ClusterIP` services `api1`, `api2`, and `api3`.
 
-## Private connectivity VM (added)
+## Private connectivity VM
 
-An Ubuntu VM was created in the same resource group to test private-cluster connectivity and run private audit scripts.
-
-- VM name: `vm-akspvt-audit`
-- Resource group: `rg-aks-ingress-compare-aue`
-- VNet/Subnet: `vnet-akspvtnginxpriv` / `snet-akspvtnginxpriv`
-- Private IP: `10.40.1.63`
-- Public IP (for SSH): `20.211.120.170`
-
-Connect:
-
-```bash
-ssh azureuser@20.211.120.170
-```
+Use the helper scripts in this repo to create and prepare an Ubuntu VM for private-cluster audit execution.
 
 ### Automated VM creation for private audit path
 
@@ -112,6 +143,8 @@ Optional parameters:
 - `--vnet-name vnet-akspvtnginxpriv`
 - `--subnet-name snet-akspvtnginxpriv`
 - `--vm-name vm-akspvt-audit`
+
+This VM has no public IP by default. Connect through Azure Bastion.
 
 After Bastion login to the VM, install Azure CLI and kubectl:
 
@@ -148,7 +181,7 @@ scp audit-managed-nginx-private-aks.sh azureuser@20.211.120.170:~/
 1. Azure CLI installed and logged in.
 2. kubectl installed.
 3. Your account has permission to create AKS, networking, and load balancer resources.
-4. Sufficient vCPU quota in `australiaeast` for 3 clusters.
+4. Sufficient vCPU quota in `australiaeast` for 5 clusters.
 
 Check:
 
@@ -160,23 +193,37 @@ az account show --output table
 
 ## Run steps
 
-From your folder:
+From your folder (Bash / WSL / Git Bash):
 
 ```bash
 cd "/mnt/d/Customers/Bajaj Finance/Nginx Replacement/Codebase"
-chmod +x deploy-aks-ingress-comparison.sh
-./deploy-aks-ingress-comparison.sh
+az group create --name rg-aks-ingress-compare-aue --location australiaeast
+az deployment group create \
+  --resource-group rg-aks-ingress-compare-aue \
+  --template-file deploy-aks-ingress-comparison.bicep \
+  --parameters location=australiaeast nodeCount=1 nodeVmSize=Standard_B2s namePrefix=bc12yh
 ```
 
-If using Git Bash on Windows:
+If using Git Bash on Windows path style:
 
 ```bash
 cd "/d/Customers/Bajaj Finance/Nginx Replacement/Codebase"
-chmod +x deploy-aks-ingress-comparison.sh
-./deploy-aks-ingress-comparison.sh
+az group create --name rg-aks-ingress-compare-aue --location australiaeast
+az deployment group create \
+  --resource-group rg-aks-ingress-compare-aue \
+  --template-file deploy-aks-ingress-comparison.bicep \
+  --parameters location=australiaeast nodeCount=1 nodeVmSize=Standard_B2s namePrefix=bc12yh
 ```
 
-If using WSL and Azure CLI is installed in Windows only, install Azure CLI in WSL or run in Azure Cloud Shell.
+If using PowerShell (Windows):
+
+```powershell
+Set-Location "D:\Customers\Bajaj Finance\Nginx Replacement\Codebase"
+az group create --name rg-aks-ingress-compare-aue --location australiaeast
+az deployment group create --resource-group rg-aks-ingress-compare-aue --template-file .\deploy-aks-ingress-comparison.bicep --parameters location=australiaeast nodeCount=1 nodeVmSize=Standard_B2s namePrefix=bc12yh
+```
+
+If using WSL and Azure CLI is installed in Windows only, either install Azure CLI in WSL or run from PowerShell/Cloud Shell.
 
 ## Expected duration
 
@@ -185,7 +232,7 @@ If using WSL and Azure CLI is installed in Windows only, install Azure CLI in WS
 
 ## Validation after deployment
 
-The script prints final IPs and curl examples. You can also run:
+After deployment completes, run the following to validate endpoints:
 
 ```bash
 # Cluster 1 - public managed NGINX
@@ -376,7 +423,7 @@ kubectl logs -n sample-api deployment/api-router
 
 ## Cleanup
 
-Cleanup is intentionally commented in the script. If needed:
+Cleanup command:
 
 ```bash
 az group delete --name rg-aks-ingress-compare-aue --yes --no-wait
