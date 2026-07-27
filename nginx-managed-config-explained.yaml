@@ -1,0 +1,72 @@
+# =============================================================
+# Managed NGINX configuration reference for AKS app routing add-on
+# =============================================================
+# This file is for understanding and manual apply/testing.
+# It separates NGINX-specific resources from the full deployment script.
+#
+# IMPORTANT:
+# - The Ingress below expects services api1, api2, api3 in namespace sample-api.
+# - ingressClassName webapprouting.kubernetes.azure.com uses the AKS managed
+#   NGINX controller created by --enable-app-routing.
+#
+# Apply (after app services are deployed):
+#   kubectl apply -f nginx-managed-config-explained.yaml
+#
+# Note:
+# The script still automates these resources inline. This file is a readable
+# equivalent focused only on managed NGINX behavior.
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sample-api-ingress
+  namespace: sample-api
+spec:
+  ingressClassName: webapprouting.kubernetes.azure.com
+  rules:
+  - host: myapp
+    http:
+      paths:
+      - path: /api1
+        pathType: Prefix
+        backend:
+          service:
+            name: api1
+            port:
+              number: 80
+      - path: /api2
+        pathType: Prefix
+        backend:
+          service:
+            name: api2
+            port:
+              number: 80
+      - path: /api3
+        pathType: Prefix
+        backend:
+          service:
+            name: api3
+            port:
+              number: 80
+
+---
+apiVersion: approuting.kubernetes.azure.com/v1alpha1
+kind: NginxIngressController
+metadata:
+  name: default
+spec:
+  # Keep the managed default ingress class.
+  ingressClassName: webapprouting.kubernetes.azure.com
+  controllerNamePrefix: nginx
+  # Private/internal exposure for managed NGINX service.
+  loadBalancerAnnotations:
+    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+
+# =============================================================
+# Usage mapping:
+# - Cluster 1 (akspublicnginx): Apply only the Ingress resource above.
+# - Cluster 2 (akspvtnginx): Apply both resources above.
+#   (NginxIngressController patch makes managed NGINX internal/private.)
+# - Cluster 3 (aksnonginx): Do not apply this file (no NGINX by design).
+# =============================================================
