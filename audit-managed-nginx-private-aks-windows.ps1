@@ -299,7 +299,14 @@ foreach ($target in $Targets) {
 $rows | Export-Csv -Path $outputCsv -NoTypeInformation
 
 Write-Host "Private AKS audit completed. CSV file: $outputCsv"
+Write-Host ""
+Write-Host "========== BEGIN AUDIT CSV =========="
+Get-Content -Path $outputCsv
+Write-Host "=========== END AUDIT CSV ==========="
+
 try {
+    Write-Host ""
+    Write-Host "Formatted preview:"
     $rows | Select-Object -First 50 | Format-Table -AutoSize
 }
 catch {

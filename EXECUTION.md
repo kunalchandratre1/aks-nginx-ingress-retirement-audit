@@ -5,6 +5,9 @@ This guide explains how to run the deployment script and validate the five-clust
 ## Files created
 
 - Script: `deploy-aks-ingress-comparison.sh`
+- Bicep (infra + workload deployment): `deploy-aks-ingress-comparison.bicep`
+- VM create helper: `create-private-audit-vm.sh`
+- VM tools installer: `install-az-cli-ubuntu.sh`
 - Guide: `EXECUTION.md`
 - API source: `api1.py`
 - API source: `api2.py`
@@ -15,6 +18,42 @@ This guide explains how to run the deployment script and validate the five-clust
 - Private AKS audit script: `audit-managed-nginx-private-aks.sh`
 
 Important: run the script from this same folder so it can read these source files and create Kubernetes ConfigMaps from them.
+
+## One-command Bicep deployment (recommended for repeat demos)
+
+Use this option when you want to recreate all 5 AKS demo clusters and deploy `api1`, `api2`, `api3`, managed NGINX ingress (where applicable), and router LB (for `aksnonginx`) in one deployment.
+
+Prerequisites specific to this path:
+
+1. You can create role assignments in the target resource group (Owner or User Access Administrator is required).
+2. Azure CLI is logged in with sufficient AKS/networking quota.
+
+Run:
+
+```bash
+# 1) Create/ensure resource group
+az group create --name rg-aks-ingress-compare-aue --location australiaeast
+
+# 2) Deploy all clusters + workloads
+az deployment group create \
+  --resource-group rg-aks-ingress-compare-aue \
+  --template-file deploy-aks-ingress-comparison.bicep \
+  --parameters location=australiaeast nodeCount=1 nodeVmSize=Standard_B2s
+```
+
+Optional parameters:
+
+- `namePrefix=<value>` to avoid cluster name conflicts in shared subscriptions.
+- `kubernetesVersion=<value>` to pin a specific AKS version.
+
+What this Bicep deployment does:
+
+1. Creates five AKS clusters used in this comparison.
+2. Adds `userpool` node pool in each cluster.
+3. Deploys namespace `sample-api` and `api1`, `api2`, `api3` deployments/services in all clusters.
+4. Deploys managed ingress resources on managed-NGINX clusters.
+5. Applies internal managed-NGINX configuration for private ingress scenarios.
+6. Deploys `api-router` + public `LoadBalancer` service for `aksnonginx`.
 
 ## What this deploys
 
@@ -56,6 +95,29 @@ Connect:
 
 ```bash
 ssh azureuser@20.211.120.170
+```
+
+### Automated VM creation for private audit path
+
+Use this helper to create a Bastion-friendly Ubuntu VM (username/password auth, no public IP) in your target VNet/subnet.
+
+```bash
+chmod +x create-private-audit-vm.sh
+./create-private-audit-vm.sh --admin-username azureuser
+```
+
+Optional parameters:
+
+- `--resource-group rg-aks-ingress-compare-aue`
+- `--vnet-name vnet-akspvtnginxpriv`
+- `--subnet-name snet-akspvtnginxpriv`
+- `--vm-name vm-akspvt-audit`
+
+After Bastion login to the VM, install Azure CLI and kubectl:
+
+```bash
+chmod +x install-az-cli-ubuntu.sh
+./install-az-cli-ubuntu.sh
 ```
 
 From inside the VM, sign in and prepare tools (if required):

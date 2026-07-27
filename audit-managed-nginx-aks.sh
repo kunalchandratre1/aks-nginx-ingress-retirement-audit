@@ -180,4 +180,13 @@ for TARGET in "${TARGETS[@]}"; do
 done
 
 echo "Audit completed. CSV file: $OUTPUT_CSV"
-column -s, -t "$OUTPUT_CSV" | head -n 50
+echo ""
+echo "========== BEGIN AUDIT CSV =========="
+cat "$OUTPUT_CSV"
+echo "=========== END AUDIT CSV ==========="
+
+if command -v column >/dev/null 2>&1; then
+  echo ""
+  echo "Formatted preview:"
+  column -s, -t "$OUTPUT_CSV" | head -n 50
+fi
