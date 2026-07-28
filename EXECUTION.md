@@ -35,7 +35,7 @@ Run:
 az group create --name rg-aks-ingress-compare-aue --location australiaeast
 
 # 2) Deploy all clusters + workloads
-az deployment group create --resource-group rg-aks-ingress-compare-aue --template-file deploy-aks-ingress-comparison.bicep --parameters location=australiaeast nodeCount=1 nodeVmSize=Standard_B2s namePrefix=nb67hg
+az deployment group create --resource-group rg-aks-ingress-compare-aue --template-file deploy-aks-ingress-comparison.bicep --parameters location=australiaeast nodeCount=1 nodeVmSize=Standard_B2s namePrefix=<your-prefix>
 ```
 
 Optional parameters:
@@ -47,8 +47,11 @@ What this Bicep deployment does:
 
 1. Creates five AKS clusters used in this comparison.
 2. Adds `userpool` node pool in each cluster.
-3. Creates the user-assigned identity used for automation.
-4. Outputs cluster names and identity details for follow-up workload steps.
+3. Creates one shared VNet for all demo clusters.
+4. Creates one dedicated subnet per AKS cluster plus one dedicated subnet for the audit VM.
+5. Deploys each AKS cluster into its own dedicated subnet in the shared VNet.
+6. Creates the user-assigned identity used for automation.
+7. Outputs cluster names, shared VNet name, subnet names, and identity details for follow-up workload steps.
 
 After this Bicep deployment completes, run the post-deploy script to configure workloads across all clusters.
 
@@ -66,7 +69,7 @@ Run:
 
 ```bash
 chmod +x deploy-demo-workloads-all-clusters.sh
-./deploy-demo-workloads-all-clusters.sh --resource-group rg-aks-ingress-compare-aue --name-prefix bc12yh
+./deploy-demo-workloads-all-clusters.sh --resource-group rg-aks-ingress-compare-aue --name-prefix <your-prefix>
 ```
 
 Azure Cloud Shell support:
@@ -79,7 +82,7 @@ Option 1 (recommended): clone the repository in Cloud Shell.
 git clone https://github.com/kunalchandratre1/aks-nginx-ingress-retirement-audit.git
 cd aks-nginx-ingress-retirement-audit
 chmod +x deploy-demo-workloads-all-clusters.sh
-./deploy-demo-workloads-all-clusters.sh --resource-group rg-aks-ingress-compare-aue --name-prefix bc12yh
+./deploy-demo-workloads-all-clusters.sh --resource-group rg-aks-ingress-compare-aue --name-prefix <your-prefix>
 ```
 
 Option 2: upload only required files to Cloud Shell and run from that folder.
@@ -102,6 +105,14 @@ Notes:
 
 - Region: `australiaeast`
 - One resource group: `rg-aks-ingress-compare-aue`
+- One shared VNet for the demo environment
+- Dedicated subnets:
+  - one subnet for `akspublicnginx`
+  - one subnet for `akspvtnginx`
+  - one subnet for `aksnonginx`
+  - one subnet for `akspvtnginxpriv`
+  - one subnet for `akspvtnon-nginx`
+  - one subnet for the audit VM
 - Five AKS clusters:
   - `akspublicnginx` (app routing add-on + managed NGINX public)
   - `akspvtnginx` (app routing add-on + managed NGINX private)
@@ -132,6 +143,8 @@ Use the helper scripts in this repo to create and prepare an Ubuntu VM for priva
 
 Use this helper to create a Bastion-friendly Ubuntu VM (username/password auth, no public IP) in your target VNet/subnet.
 
+After the shared-VNet Bicep deployment, this VM should be created in the dedicated VM subnet from that shared VNet.
+
 ```bash
 chmod +x create-private-audit-vm.sh
 ./create-private-audit-vm.sh --admin-username azureuser
@@ -140,15 +153,26 @@ chmod +x create-private-audit-vm.sh
 Optional parameters:
 
 - `--resource-group rg-aks-ingress-compare-aue`
-- `--vnet-name vnet-akspvtnginxpriv`
-- `--subnet-name snet-akspvtnginxpriv`
+- `--vnet-name <existing-vnet-name>`
+- `--subnet-name <existing-subnet-name-used-as-vnet-anchor>`
+- `--vnet-resource-group <vnet-resource-group>`
+- `--vm-subnet-name snet-vm-akspvt-audit`
+- `--vm-subnet-size 8` or `--vm-subnet-size 16` (default 16)
+- `--vm-subnet-prefix <explicit-cidr-within-vnet>`
+- `--vm-subnet-nsg-name nsg-vm-akspvt-audit`
 - `--vm-name vm-akspvt-audit`
+
+Note: with the shared-VNet deployment, the helper can reuse the pre-created VM subnet. If `--vm-subnet-prefix` is not provided and the VM subnet does not already exist, the script auto-creates a non-overlapping dedicated subnet in the target VNet using `/29` (8 IPs) or `/28` (16 IPs).
 
 This VM has no public IP by default. Connect through Azure Bastion.
 
 After Bastion login to the VM, install Azure CLI and kubectl:
 
 ```bash
+sudo apt-get update -y
+sudo apt-get install -y git
+git clone https://github.com/kunalchandratre1/aks-nginx-ingress-retirement-audit.git
+cd aks-nginx-ingress-retirement-audit
 chmod +x install-az-cli-ubuntu.sh
 ./install-az-cli-ubuntu.sh
 ```
@@ -159,6 +183,13 @@ From inside the VM, sign in and prepare tools (if required):
 az login
 az account show --output table
 kubectl version --client
+```
+
+Deploy `api1`, `api2`, `api3` (and cluster-specific ingress/router setup, including managed NGINX where applicable) before running the audit:
+
+```bash
+chmod +x deploy-demo-workloads-all-clusters.sh
+./deploy-demo-workloads-all-clusters.sh --resource-group rg-aks-ingress-compare-aue --name-prefix <your-prefix>
 ```
 
 Run private audit script from the VM (recommended for private AKS):
@@ -201,7 +232,7 @@ az group create --name rg-aks-ingress-compare-aue --location australiaeast
 az deployment group create \
   --resource-group rg-aks-ingress-compare-aue \
   --template-file deploy-aks-ingress-comparison.bicep \
-  --parameters location=australiaeast nodeCount=1 nodeVmSize=Standard_B2s namePrefix=bc12yh
+  --parameters location=australiaeast nodeCount=1 nodeVmSize=Standard_B2s namePrefix=<your-prefix>
 ```
 
 If using Git Bash on Windows path style:
@@ -212,7 +243,7 @@ az group create --name rg-aks-ingress-compare-aue --location australiaeast
 az deployment group create \
   --resource-group rg-aks-ingress-compare-aue \
   --template-file deploy-aks-ingress-comparison.bicep \
-  --parameters location=australiaeast nodeCount=1 nodeVmSize=Standard_B2s namePrefix=bc12yh
+  --parameters location=australiaeast nodeCount=1 nodeVmSize=Standard_B2s namePrefix=<your-prefix>
 ```
 
 If using PowerShell (Windows):
@@ -220,7 +251,7 @@ If using PowerShell (Windows):
 ```powershell
 Set-Location "D:\Customers\Bajaj Finance\Nginx Replacement\Codebase"
 az group create --name rg-aks-ingress-compare-aue --location australiaeast
-az deployment group create --resource-group rg-aks-ingress-compare-aue --template-file .\deploy-aks-ingress-comparison.bicep --parameters location=australiaeast nodeCount=1 nodeVmSize=Standard_B2s namePrefix=bc12yh
+az deployment group create --resource-group rg-aks-ingress-compare-aue --template-file .\deploy-aks-ingress-comparison.bicep --parameters location=australiaeast nodeCount=1 nodeVmSize=Standard_B2s namePrefix=<your-prefix>
 ```
 
 If using WSL and Azure CLI is installed in Windows only, either install Azure CLI in WSL or run from PowerShell/Cloud Shell.
@@ -299,10 +330,20 @@ Use one of the following blocks after deployment to run final end-to-end API che
 ### Bash (Cloud Shell / Git Bash / WSL)
 
 ```bash
+# Set this to the same prefix used in Bicep deployment. Keep empty if no prefix was used.
+NAME_PREFIX="nb67hg"
+if [ -n "$NAME_PREFIX" ]; then PREFIX="${NAME_PREFIX}-"; else PREFIX=""; fi
+
+CL1_NAME="${PREFIX}akspublicnginx"
+CL2_NAME="${PREFIX}akspvtnginx"
+CL3_NAME="${PREFIX}aksnonginx"
+CL4_NAME="${PREFIX}akspvtnginxpriv"
+CL5_NAME="${PREFIX}akspvtnon-nginx"
+
 # --------------------------------------------
 # Cluster 1 final test (public managed NGINX)
 # --------------------------------------------
-az aks get-credentials -g rg-aks-ingress-compare-aue -n akspublicnginx --overwrite-existing
+az aks get-credentials -g rg-aks-ingress-compare-aue -n "$CL1_NAME" --overwrite-existing
 CL1_IP=$(kubectl get svc -n app-routing-system nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 echo "Cluster1 IP: ${CL1_IP}"
 
@@ -315,7 +356,7 @@ curl -s -H "Host: myapp" "http://${CL1_IP}/api3" ; echo
 # Cluster 2 final test (private managed NGINX)
 # --------------------------------------------
 # Run from a machine/network path that can reach private AKS VNet addresses.
-az aks get-credentials -g rg-aks-ingress-compare-aue -n akspvtnginx --overwrite-existing
+az aks get-credentials -g rg-aks-ingress-compare-aue -n "$CL2_NAME" --overwrite-existing
 CL2_IP=$(kubectl get svc -n app-routing-system nginx-internal-0 -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 echo "Cluster2 private IP: ${CL2_IP}"
 
@@ -337,13 +378,39 @@ kubectl -n sample-api delete pod curltest --ignore-not-found=true
 # -------------------------------------------------
 # Cluster 3 final test (public LoadBalancer service)
 # -------------------------------------------------
-az aks get-credentials -g rg-aks-ingress-compare-aue -n aksnonginx --overwrite-existing
+az aks get-credentials -g rg-aks-ingress-compare-aue -n "$CL3_NAME" --overwrite-existing
 CL3_IP=$(kubectl get svc sample-api-public -n sample-api -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
 echo "Cluster3 public LB IP: ${CL3_IP}"
 
 curl -s "http://${CL3_IP}/api1" ; echo
 curl -s "http://${CL3_IP}/api2" ; echo
 curl -s "http://${CL3_IP}/api3" ; echo
+
+
+# --------------------------------------------
+# Cluster 4 final test (private AKS + managed NGINX)
+# --------------------------------------------
+# Run from a machine/network path that can reach private AKS VNet addresses.
+az aks get-credentials -g rg-aks-ingress-compare-aue -n "$CL4_NAME" --overwrite-existing
+CL4_IP=$(kubectl get svc -n app-routing-system nginx-internal-0 -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+echo "Cluster4 private IP: ${CL4_IP}"
+
+curl -s -H "Host: myapp" "http://${CL4_IP}/api1" ; echo
+curl -s -H "Host: myapp" "http://${CL4_IP}/api2" ; echo
+curl -s -H "Host: myapp" "http://${CL4_IP}/api3" ; echo
+
+
+# -------------------------------------------------
+# Cluster 5 final test (private AKS, no ingress)
+# -------------------------------------------------
+az aks get-credentials -g rg-aks-ingress-compare-aue -n "$CL5_NAME" --overwrite-existing
+
+# Run inside cluster because there is no ingress/public endpoint by design.
+kubectl -n sample-api run curltest --image=curlimages/curl:8.9.1 --restart=Never --command -- sh -c \
+  "curl -s http://api1.sample-api.svc.cluster.local; echo; \
+   curl -s http://api2.sample-api.svc.cluster.local; echo; \
+   curl -s http://api3.sample-api.svc.cluster.local; echo"
+kubectl -n sample-api delete pod curltest --ignore-not-found=true
 ```
 
 ### PowerShell (Windows PowerShell / pwsh)

@@ -42,6 +42,116 @@ var dnsPrefixes = {
   privateManaged: 'aks${dnsPrefixBase}prv${dnsPrefixSuffix}'
   privateNoNginx: 'aks${dnsPrefixBase}pnn${dnsPrefixSuffix}'
 }
+var network = {
+  vnetName: '${normalizedPrefix}vnet-aks-demo'
+  addressPrefix: '10.240.0.0/16'
+  subnets: {
+    publicManaged: {
+      name: 'snet-akspublicnginx'
+      prefix: '10.240.0.0/20'
+    }
+    privateManagedOnPublic: {
+      name: 'snet-akspvtnginx'
+      prefix: '10.240.16.0/20'
+    }
+    publicNoNginx: {
+      name: 'snet-aksnonginx'
+      prefix: '10.240.32.0/20'
+    }
+    privateManaged: {
+      name: 'snet-akspvtnginxpriv'
+      prefix: '10.240.48.0/20'
+    }
+    privateNoNginx: {
+      name: 'snet-akspvtnon-nginx'
+      prefix: '10.240.64.0/20'
+    }
+    auditVm: {
+      name: 'snet-vm-akspvt-audit'
+      prefix: '10.240.80.0/24'
+    }
+  }
+}
+
+resource sharedVnet 'Microsoft.Network/virtualNetworks@2023-09-01' = {
+  name: network.vnetName
+  location: location
+  properties: {
+    addressSpace: {
+      addressPrefixes: [
+        network.addressPrefix
+      ]
+    }
+    subnets: [
+      {
+        name: network.subnets.publicManaged.name
+        properties: {
+          addressPrefix: network.subnets.publicManaged.prefix
+        }
+      }
+      {
+        name: network.subnets.privateManagedOnPublic.name
+        properties: {
+          addressPrefix: network.subnets.privateManagedOnPublic.prefix
+        }
+      }
+      {
+        name: network.subnets.publicNoNginx.name
+        properties: {
+          addressPrefix: network.subnets.publicNoNginx.prefix
+        }
+      }
+      {
+        name: network.subnets.privateManaged.name
+        properties: {
+          addressPrefix: network.subnets.privateManaged.prefix
+        }
+      }
+      {
+        name: network.subnets.privateNoNginx.name
+        properties: {
+          addressPrefix: network.subnets.privateNoNginx.prefix
+        }
+      }
+      {
+        name: network.subnets.auditVm.name
+        properties: {
+          addressPrefix: network.subnets.auditVm.prefix
+        }
+      }
+    ]
+  }
+}
+
+resource aksPublicManagedSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-09-01' existing = {
+  parent: sharedVnet
+  name: network.subnets.publicManaged.name
+}
+
+resource aksPrivateManagedOnPublicSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-09-01' existing = {
+  parent: sharedVnet
+  name: network.subnets.privateManagedOnPublic.name
+}
+
+resource aksPublicNoNginxSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-09-01' existing = {
+  parent: sharedVnet
+  name: network.subnets.publicNoNginx.name
+}
+
+resource aksPrivateManagedSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-09-01' existing = {
+  parent: sharedVnet
+  name: network.subnets.privateManaged.name
+}
+
+resource aksPrivateNoNginxSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-09-01' existing = {
+  parent: sharedVnet
+  name: network.subnets.privateNoNginx.name
+}
+
+resource auditVmSubnet 'Microsoft.Network/virtualNetworks/subnets@2023-09-01' existing = {
+  parent: sharedVnet
+  name: network.subnets.auditVm.name
+}
 
 resource deploymentIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: '${normalizedPrefix}id-aks-demo-deployer'
@@ -70,7 +180,7 @@ resource aksPublicManaged 'Microsoft.ContainerService/managedClusters@2024-05-01
   }
   properties: {
     dnsPrefix: dnsPrefixes.publicManaged
-    kubernetesVersion: empty(kubernetesVersion) ? json('null') : kubernetesVersion
+    kubernetesVersion: empty(kubernetesVersion) ? null : kubernetesVersion
     enableRBAC: true
     agentPoolProfiles: [
       {
@@ -80,6 +190,7 @@ resource aksPublicManaged 'Microsoft.ContainerService/managedClusters@2024-05-01
         vmSize: nodeVmSize
         osType: 'Linux'
         type: 'VirtualMachineScaleSets'
+        vnetSubnetID: aksPublicManagedSubnet.id
       }
     ]
     networkProfile: {
@@ -87,7 +198,7 @@ resource aksPublicManaged 'Microsoft.ContainerService/managedClusters@2024-05-01
       loadBalancerSku: 'standard'
     }
     addonProfiles: {
-      'azureKeyvaultSecretsProvider': {
+      azureKeyvaultSecretsProvider: {
         enabled: false
       }
     }
@@ -111,7 +222,7 @@ resource aksPrivateManagedOnPublic 'Microsoft.ContainerService/managedClusters@2
   }
   properties: {
     dnsPrefix: dnsPrefixes.privateManagedOnPublic
-    kubernetesVersion: empty(kubernetesVersion) ? json('null') : kubernetesVersion
+    kubernetesVersion: empty(kubernetesVersion) ? null : kubernetesVersion
     enableRBAC: true
     apiServerAccessProfile: {
       enablePrivateCluster: false
@@ -124,6 +235,7 @@ resource aksPrivateManagedOnPublic 'Microsoft.ContainerService/managedClusters@2
         vmSize: nodeVmSize
         osType: 'Linux'
         type: 'VirtualMachineScaleSets'
+        vnetSubnetID: aksPrivateManagedOnPublicSubnet.id
       }
     ]
     networkProfile: {
@@ -150,7 +262,7 @@ resource aksPublicNoNginx 'Microsoft.ContainerService/managedClusters@2024-05-01
   }
   properties: {
     dnsPrefix: dnsPrefixes.publicNoNginx
-    kubernetesVersion: empty(kubernetesVersion) ? json('null') : kubernetesVersion
+    kubernetesVersion: empty(kubernetesVersion) ? null : kubernetesVersion
     enableRBAC: true
     agentPoolProfiles: [
       {
@@ -160,6 +272,7 @@ resource aksPublicNoNginx 'Microsoft.ContainerService/managedClusters@2024-05-01
         vmSize: nodeVmSize
         osType: 'Linux'
         type: 'VirtualMachineScaleSets'
+        vnetSubnetID: aksPublicNoNginxSubnet.id
       }
     ]
     networkProfile: {
@@ -181,7 +294,7 @@ resource aksPrivateManaged 'Microsoft.ContainerService/managedClusters@2024-05-0
   }
   properties: {
     dnsPrefix: dnsPrefixes.privateManaged
-    kubernetesVersion: empty(kubernetesVersion) ? json('null') : kubernetesVersion
+    kubernetesVersion: empty(kubernetesVersion) ? null : kubernetesVersion
     enableRBAC: true
     apiServerAccessProfile: {
       enablePrivateCluster: true
@@ -194,6 +307,7 @@ resource aksPrivateManaged 'Microsoft.ContainerService/managedClusters@2024-05-0
         vmSize: nodeVmSize
         osType: 'Linux'
         type: 'VirtualMachineScaleSets'
+        vnetSubnetID: aksPrivateManagedSubnet.id
       }
     ]
     networkProfile: {
@@ -220,7 +334,7 @@ resource aksPrivateNoNginx 'Microsoft.ContainerService/managedClusters@2024-05-0
   }
   properties: {
     dnsPrefix: dnsPrefixes.privateNoNginx
-    kubernetesVersion: empty(kubernetesVersion) ? json('null') : kubernetesVersion
+    kubernetesVersion: empty(kubernetesVersion) ? null : kubernetesVersion
     enableRBAC: true
     apiServerAccessProfile: {
       enablePrivateCluster: true
@@ -233,6 +347,7 @@ resource aksPrivateNoNginx 'Microsoft.ContainerService/managedClusters@2024-05-0
         vmSize: nodeVmSize
         osType: 'Linux'
         type: 'VirtualMachineScaleSets'
+        vnetSubnetID: aksPrivateNoNginxSubnet.id
       }
     ]
     networkProfile: {
@@ -251,6 +366,7 @@ resource aksPublicManagedUserPool 'Microsoft.ContainerService/managedClusters/ag
     vmSize: nodeVmSize
     osType: 'Linux'
     type: 'VirtualMachineScaleSets'
+    vnetSubnetID: aksPublicManagedSubnet.id
   }
 }
 
@@ -263,6 +379,7 @@ resource aksPrivateManagedOnPublicUserPool 'Microsoft.ContainerService/managedCl
     vmSize: nodeVmSize
     osType: 'Linux'
     type: 'VirtualMachineScaleSets'
+    vnetSubnetID: aksPrivateManagedOnPublicSubnet.id
   }
 }
 
@@ -275,6 +392,7 @@ resource aksPublicNoNginxUserPool 'Microsoft.ContainerService/managedClusters/ag
     vmSize: nodeVmSize
     osType: 'Linux'
     type: 'VirtualMachineScaleSets'
+    vnetSubnetID: aksPublicNoNginxSubnet.id
   }
 }
 
@@ -287,6 +405,7 @@ resource aksPrivateManagedUserPool 'Microsoft.ContainerService/managedClusters/a
     vmSize: nodeVmSize
     osType: 'Linux'
     type: 'VirtualMachineScaleSets'
+    vnetSubnetID: aksPrivateManagedSubnet.id
   }
 }
 
@@ -299,9 +418,19 @@ resource aksPrivateNoNginxUserPool 'Microsoft.ContainerService/managedClusters/a
     vmSize: nodeVmSize
     osType: 'Linux'
     type: 'VirtualMachineScaleSets'
+    vnetSubnetID: aksPrivateNoNginxSubnet.id
   }
 }
 
 output createdClusters object = clusters
+output sharedVnetName string = sharedVnet.name
+output sharedSubnetNames object = {
+  publicManaged: aksPublicManagedSubnet.name
+  privateManagedOnPublic: aksPrivateManagedOnPublicSubnet.name
+  publicNoNginx: aksPublicNoNginxSubnet.name
+  privateManaged: aksPrivateManagedSubnet.name
+  privateNoNginx: aksPrivateNoNginxSubnet.name
+  auditVm: auditVmSubnet.name
+}
 output userAssignedIdentityName string = deploymentIdentity.name
 output userAssignedIdentityPrincipalId string = deploymentIdentity.properties.principalId

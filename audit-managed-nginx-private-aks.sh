@@ -14,11 +14,11 @@ printf 'subscription_name,subscription_id,resource_group,cluster_name,arm_app_ro
 TARGETS=(
   # "00000000-0000-0000-0000-000000000000|rg-example|aks-private-example"
   "ba43c91f-2d76-4000-a7ad-24750cab54c3|ai-obs-sre-demo|aiosre-aks-demo"
-  "ba43c91f-2d76-4000-a7ad-24750cab54c3|rg-aks-ingress-compare-aue|aksnonginx"
-  "ba43c91f-2d76-4000-a7ad-24750cab54c3|rg-aks-ingress-compare-aue|akspublicnginx"
-  "ba43c91f-2d76-4000-a7ad-24750cab54c3|rg-aks-ingress-compare-aue|akspvtnginx"
-  "ba43c91f-2d76-4000-a7ad-24750cab54c3|rg-aks-ingress-compare-aue|akspvtnginxpriv"
-  "ba43c91f-2d76-4000-a7ad-24750cab54c3|rg-aks-ingress-compare-aue|akspvtnon-nginx"
+  "ba43c91f-2d76-4000-a7ad-24750cab54c3|rg-aks-ingress-compare-aue|nb67hg-aksnonginx"
+  "ba43c91f-2d76-4000-a7ad-24750cab54c3|rg-aks-ingress-compare-aue|nb67hg-akspublicnginx"
+  "ba43c91f-2d76-4000-a7ad-24750cab54c3|rg-aks-ingress-compare-aue|nb67hg-akspvtnginx"
+  "ba43c91f-2d76-4000-a7ad-24750cab54c3|rg-aks-ingress-compare-aue|nb67hg-akspvtnginxpriv"
+  "ba43c91f-2d76-4000-a7ad-24750cab54c3|rg-aks-ingress-compare-aue|nb67hg-akspvtnon-nginx"
 
 )
 
@@ -39,6 +39,32 @@ echo "Starting private AKS namespace audit across subscriptions..."
 
 write_row() {
   printf '"%s","%s","%s","%s","%s","%s","%s","%s","%s","%s"\n' "$1" "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9" "${10}" >> "$OUTPUT_CSV"
+}
+
+detect_k8s_reachability_issue() {
+  local kubectl_output="$1"
+  local private_fqdn="$2"
+
+  if echo "$kubectl_output" | grep -qiE 'no such host|server misbehaving|Temporary failure in name resolution'; then
+    if [[ -n "$private_fqdn" ]]; then
+      echo "PRIVATE_DNS_UNRESOLVABLE:${private_fqdn}"
+    else
+      echo "PRIVATE_DNS_UNRESOLVABLE"
+    fi
+    return 0
+  fi
+
+  if echo "$kubectl_output" | grep -qiE 'i/o timeout|context deadline exceeded|operation timed out'; then
+    echo "PRIVATE_API_TIMEOUT"
+    return 0
+  fi
+
+  if echo "$kubectl_output" | grep -qiE 'forbidden|unauthorized'; then
+    echo "K8S_API_ACCESS_DENIED"
+    return 0
+  fi
+
+  echo "NOT_IDENTIFIABLE_CLUSTER_PRIVATE_OR_UNREACHABLE"
 }
 
 for TARGET in "${TARGETS[@]}"; do
@@ -86,6 +112,7 @@ for TARGET in "${TARGETS[@]}"; do
     : > "$TMP_KUBECONFIG"
 
     ARM_ENABLED_RAW="$(az aks show --resource-group "$CLUSTER_RG" --name "$CLUSTER_NAME" --query "ingressProfile.webAppRouting.enabled" -o tsv 2>/dev/null || echo "__ARM_QUERY_ERROR__")"
+    PRIVATE_FQDN="$(az aks show --resource-group "$CLUSTER_RG" --name "$CLUSTER_NAME" --query "privateFqdn" -o tsv 2>/dev/null || true)"
     case "${ARM_ENABLED_RAW,,}" in
       true) ARM_APP_ROUTING_ENABLED="yes" ;;
       false|""|null) ARM_APP_ROUTING_ENABLED="no" ;;
@@ -104,12 +131,13 @@ for TARGET in "${TARGETS[@]}"; do
       continue
     fi
 
-    if ! kubectl get ns --request-timeout=10s >/dev/null 2>&1; then
+    KUBECTL_NS_OUTPUT="$(kubectl get ns --request-timeout=10s 2>&1 || true)"
+    if [[ "$KUBECTL_NS_OUTPUT" == *"Unable to connect to the server"* || "$KUBECTL_NS_OUTPUT" == *"couldn't get current server API group list"* || "$KUBECTL_NS_OUTPUT" == *"Error from server"* ]]; then
       K8S_API_REACHABLE="no"
       K8S_MANAGED_NGINX_OBSERVED="unknown"
-      INGRESS_NAMESPACES="NOT_IDENTIFIABLE_CLUSTER_PRIVATE_OR_UNREACHABLE"
+      INGRESS_NAMESPACES="$(detect_k8s_reachability_issue "$KUBECTL_NS_OUTPUT" "$PRIVATE_FQDN")"
       K8S_OSS_NGINX_OBSERVED="unknown"
-      OSS_INGRESS_NAMESPACES="NOT_IDENTIFIABLE_CLUSTER_PRIVATE_OR_UNREACHABLE"
+      OSS_INGRESS_NAMESPACES="$INGRESS_NAMESPACES"
 
       write_row "$SUB_NAME" "$SUB_ID" "$CLUSTER_RG" "$CLUSTER_NAME" "$ARM_APP_ROUTING_ENABLED" "$K8S_API_REACHABLE" "$K8S_MANAGED_NGINX_OBSERVED" "$INGRESS_NAMESPACES" "$K8S_OSS_NGINX_OBSERVED" "$OSS_INGRESS_NAMESPACES"
       continue
