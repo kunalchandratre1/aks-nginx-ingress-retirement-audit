@@ -14,11 +14,11 @@ printf 'subscription_name,subscription_id,resource_group,cluster_name,arm_app_ro
 TARGETS=(
   # "00000000-0000-0000-0000-000000000000|rg-example|aks-private-example"
   "ba43c91f-2d76-4000-a7ad-24750cab54c3|ai-obs-sre-demo|aiosre-aks-demo"
-  "ba43c91f-2d76-4000-a7ad-24750cab54c3|rg-aks-ingress-compare-aue|nb67hg-aksnonginx"
-  "ba43c91f-2d76-4000-a7ad-24750cab54c3|rg-aks-ingress-compare-aue|nb67hg-akspublicnginx"
-  "ba43c91f-2d76-4000-a7ad-24750cab54c3|rg-aks-ingress-compare-aue|nb67hg-akspvtnginx"
-  "ba43c91f-2d76-4000-a7ad-24750cab54c3|rg-aks-ingress-compare-aue|nb67hg-akspvtnginxpriv"
-  "ba43c91f-2d76-4000-a7ad-24750cab54c3|rg-aks-ingress-compare-aue|nb67hg-akspvtnon-nginx"
+  "ba43c91f-2d76-4000-a7ad-24750cab54c3|rg-aks-ingress-compare-aue|k8s12-aksnonginx"
+  "ba43c91f-2d76-4000-a7ad-24750cab54c3|rg-aks-ingress-compare-aue|k8s12-akspublicnginx"
+  "ba43c91f-2d76-4000-a7ad-24750cab54c3|rg-aks-ingress-compare-aue|k8s12-akspvtnginx"
+  "ba43c91f-2d76-4000-a7ad-24750cab54c3|rg-aks-ingress-compare-aue|k8s12-akspvtnginxpriv"
+  "ba43c91f-2d76-4000-a7ad-24750cab54c3|rg-aks-ingress-compare-aue|k8s12-akspvtnon-nginx"
 
 )
 
