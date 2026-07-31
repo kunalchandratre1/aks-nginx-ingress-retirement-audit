@@ -1,6 +1,6 @@
-# Managed NGINX and OSS ingress-nginx Audit for AKS
+# NGINX (Managed + OSS ingress-nginx) Audit for AKS
 
-This guide covers two scripts:
+This guide covers audit execution for both managed NGINX and OSS ingress-nginx using two scripts:
 
 1. `audit-managed-nginx-aks.sh` for targeted AKS clusters
 2. `audit-managed-nginx-private-aks.sh` for targeted private AKS checks
@@ -251,7 +251,7 @@ Example:
 ### Run from PowerShell
 
 ```powershell
-cd "D:\Customers\Bajaj Finance\Nginx Replacement\Codebase"
+cd "C:\path\to\aks-nginx-ingress-retirement-audit"
 powershell -ExecutionPolicy Bypass -File .\audit-managed-nginx-private-aks-windows.ps1
 ```
 

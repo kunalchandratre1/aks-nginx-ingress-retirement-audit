@@ -192,20 +192,7 @@ chmod +x deploy-demo-workloads-all-clusters.sh
 ./deploy-demo-workloads-all-clusters.sh --resource-group rg-aks-ingress-compare-aue --name-prefix <your-prefix>
 ```
 
-Run private audit script from the VM (recommended for private AKS):
-
-```bash
-chmod +x audit-managed-nginx-private-aks.sh
-./audit-managed-nginx-private-aks.sh
-```
-
-If script files are on your local machine, copy them to VM:
-
-```bash
-scp MANAGED_NGINX_AUDIT_SCRIPT.md azureuser@20.211.120.170:~/
-scp audit-managed-nginx-aks.sh azureuser@20.211.120.170:~/
-scp audit-managed-nginx-private-aks.sh azureuser@20.211.120.170:~/
-```
+Audit script execution is documented in `NGINX_AUDIT_SCRIPT.md`.
 
 ## Prerequisites
 
@@ -227,7 +214,7 @@ az account show --output table
 From your folder (Bash / WSL / Git Bash):
 
 ```bash
-cd "/mnt/d/Customers/Bajaj Finance/Nginx Replacement/Codebase"
+cd "/path/to/aks-nginx-ingress-retirement-audit"
 az group create --name rg-aks-ingress-compare-aue --location australiaeast
 az deployment group create \
   --resource-group rg-aks-ingress-compare-aue \
@@ -238,7 +225,7 @@ az deployment group create \
 If using Git Bash on Windows path style:
 
 ```bash
-cd "/d/Customers/Bajaj Finance/Nginx Replacement/Codebase"
+cd "/path/to/aks-nginx-ingress-retirement-audit"
 az group create --name rg-aks-ingress-compare-aue --location australiaeast
 az deployment group create \
   --resource-group rg-aks-ingress-compare-aue \
@@ -249,7 +236,7 @@ az deployment group create \
 If using PowerShell (Windows):
 
 ```powershell
-Set-Location "D:\Customers\Bajaj Finance\Nginx Replacement\Codebase"
+Set-Location "C:\path\to\aks-nginx-ingress-retirement-audit"
 az group create --name rg-aks-ingress-compare-aue --location australiaeast
 az deployment group create --resource-group rg-aks-ingress-compare-aue --template-file .\deploy-aks-ingress-comparison.bicep --parameters location=australiaeast nodeCount=1 nodeVmSize=Standard_B2s namePrefix=<your-prefix>
 ```
